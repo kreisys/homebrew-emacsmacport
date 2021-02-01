@@ -22,6 +22,8 @@ class EmacsMac < Formula
   option "with-emacs-big-sur-icon", "Using the Emacs icon in Big Sur style"
   option "with-starter", "Build with a starter script to start emacs GUI from CLI"
   option "with-wordwrap-category", "(experiment!) Build with (backport) patch for wordwrap by category"
+  option "with-xwidgets", "Experimental: build with xwidgets support"
+  option "with-native-comp", "Build from feature/native-comp branch"
 
   # Update list from
   # https://raw.githubusercontent.com/emacsfodder/emacs-icons-project/master/icons.json
@@ -60,6 +62,13 @@ class EmacsMac < Formula
   depends_on "libxml2" => :recommended
   depends_on "glib" => :optional
   depends_on "imagemagick" => :optional
+
+  if build.with? "native-comp"
+    depends_on "libgccjit" => :recommended
+    depends_on "gcc" => :build
+    depends_on "gmp" => :build
+    depends_on "libjpeg" => :build
+  end
 
   emacs_icons_project_icons.each do |icon, sha|
     resource "emacs-icons-project-#{icon}" do
@@ -129,10 +138,10 @@ class EmacsMac < Formula
     # I have several lines of brew audit warning for this stable block, but
     # since build.head? no longer works in this scope, I don't know if there's
     # better way to not serve a patch when build with --HEAD
-    patch do
-      url "https://raw.githubusercontent.com/railwaycat/homebrew-emacsmacport/667f0efc08506facfc6963ac1fd1d5b9b777e094/patches/emacs-27.1-mac-8.1-codesign.diff"
-      sha256 "59585a84cd576e2ddf21b0ecc26fe6f0a58a40572a127e4340ef231eb0dc4dac"
-    end
+    #patch do
+    #  url "https://raw.githubusercontent.com/railwaycat/homebrew-emacsmacport/667f0efc08506facfc6963ac1fd1d5b9b777e094/patches/emacs-27.1-mac-8.1-codesign.diff"
+    #  sha256 "59585a84cd576e2ddf21b0ecc26fe6f0a58a40572a127e4340ef231eb0dc4dac"
+    #end
   end
 
   def install
@@ -146,7 +155,25 @@ class EmacsMac < Formula
     ]
     args << "--with-modules" unless build.without? "modules"
     args << "--with-rsvg" if build.with? "rsvg"
+    args << "--with-nativecomp" if build.with? "native-comp"
+    args << "--with-xwidgets" if build.with? "xwidgets"
 
+    if build.with? "native-comp"
+      gcc_ver = Formula["gcc"].any_installed_version
+      gcc_ver_major = gcc_ver.major
+      gcc_lib="#{HOMEBREW_PREFIX}/lib/gcc/#{gcc_ver_major}"
+
+      ENV.append "CFLAGS", "-I#{Formula["gcc"].include}"
+      ENV.append "CFLAGS", "-I#{Formula["libgccjit"].include}"
+      ENV.append "CFLAGS", "-I#{Formula["gmp"].include}"
+      ENV.append "CFLAGS", "-I#{Formula["libjpeg"].include}"
+
+      ENV.append "LDFLAGS", "-L#{gcc_lib}"
+      ENV.append "LDFLAGS", "-I#{Formula["gcc"].include}"
+      ENV.append "LDFLAGS", "-I#{Formula["libgccjit"].include}"
+      ENV.append "LDFLAGS", "-I#{Formula["gmp"].include}"
+      ENV.append "LDFLAGS", "-I#{Formula["libjpeg"].include}"
+    end
     icons_dir = buildpath/"mac/Emacs.app/Contents/Resources"
 
     (%w[EmacsIcon1 EmacsIcon2 EmacsIcon3 EmacsIcon4
@@ -167,6 +194,22 @@ class EmacsMac < Formula
     system "make"
     system "make", "install"
     prefix.install "NEWS-mac"
+
+    if build.with? "native-comp"
+      contents_dir = buildpath/"mac/Emacs.app/Contents"
+      contents_dir.install "native-lisp"
+
+      # Change .eln files dylib ID to avoid that after the post-install phase
+      # all of the *.eln files end up with the same ID. See:
+      # https://github.com/Homebrew/brew/issues/9526 and
+      # https://github.com/Homebrew/brew/pull/10075
+      Dir.glob(contents_dir/"native-lisp/*/*.eln").each do |f|
+        fo = MachO::MachOFile.new(f)
+        ohai "Change dylib_id of ELN files before post_install phase"
+        fo.dylib_id = "#{contents_dir}/" + f
+        fo.write!
+      end
+    end
 
     # Follow Homebrew and don't install ctags from Emacs. This allows Vim
     # and Emacs and exuberant ctags to play together without violence.
