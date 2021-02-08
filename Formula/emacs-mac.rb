@@ -1,11 +1,12 @@
+# coding: utf-8
 class EmacsMac < Formula
   desc "YAMAMOTO Mitsuharu's Mac port of GNU Emacs"
   homepage "https://www.gnu.org/software/emacs/"
-  url "https://bitbucket.org/mituharu/emacs-mac/get/emacs-27.1-mac-8.1.tar.gz"
-  version "emacs-27.1-mac-8.1"
+  version "emacs-28.0-mac-8.2"
   sha256 "cae62f036be66ebcdada4d4563859b70825d2a8c91edd24e9e9794ece9f30dee"
 
-  head "https://bitbucket.org/mituharu/emacs-mac.git", branch: "work"
+  head "https://github.com/kreisys/emacs-mac.git", branch: "macport28"
+  url "https://github.com/kreisys/emacs-mac.git", branch: "macport28"
 
   option "with-dbus", "Build with d-bus support"
   option "without-modules", "Build without dynamic modules support"
